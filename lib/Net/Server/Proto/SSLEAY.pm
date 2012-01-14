@@ -330,8 +330,44 @@ sub write {
     $client->print($buf);
 }
 
-sub sysread  { die "sysread is not supported by Net::Server::Proto::SSLEAY" }
-sub syswrite { die "syswrite is not supported by Net::Server::Proto::SSLEAY" }
+sub sysread  {
+    my ($client, $buf, $length, $offset) = @_;
+
+    $length = length $buf unless defined $length;
+    $offset = 0 unless defined $offset;
+    my $ssl    = $client->SSLeay;
+
+    my $data = Net::SSLeay::read($ssl, $length);
+
+    return if $!{EAGAIN} || $!{EINTR};
+
+    die "SSLeay print: $!\n" unless defined $data;
+
+    $length = length($data);
+    $$buf = '' if !defined $buf;
+
+    if ($offset > length($$buf)) {
+        $$buf .= "\0" x ($offset - length($buf));
+    }
+
+    substr($$buf, $offset, length($$buf), $data);
+    return $length;
+}
+
+sub syswrite {
+    my ($client, $buf, $length, $offset) = @_;
+
+    $length = length $buf unless defined $length;
+    $offset = 0 unless defined $offset;
+    my $ssl    = $client->SSLeay;
+
+    my $write = Net::SSLeay::write_partial($ssl, $offset, $length, $buf);
+
+    return  if $!{EAGAIN} || $!{EINTR};
+    die "SSLeay print: $!\n" if $write < 0;
+
+    return $write;
+}
 
 ###----------------------------------------------------------------###
 
